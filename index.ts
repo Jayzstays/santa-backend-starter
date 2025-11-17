@@ -146,20 +146,19 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-  
-    const santaText = `Hee hee! ${text}`;  // small, fun prefix
+    // Elf voice: light, quick, playful
+    const elfText = `Hee hee! ${text}`;
 
-const tts = await openai.audio.speech.create({
-  model: "gpt-4o-mini-tts",
-  voice: "alloy",      // brighter & lighter than onyx
-  input: santaText,
-  response_format: "mp3",
-  speed: 1.15          // a bit faster = more elfy / energetic
-});
-
+    const tts = await openai.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",          // brighter, younger than onyx
+      input: elfText,
+      response_format: "mp3",
+      speed: 1.12              // a bit faster = more elfy
+    });
 
     const buf = Buffer.from(await tts.arrayBuffer());
-    const fileName = `${Date.now()}-santa.mp3`;
+    const fileName = `${Date.now()}-elf.mp3`;
     fs.writeFileSync(path.join("public", fileName), buf);
 
     const base = process.env.PUBLIC_BASE_URL || "";
@@ -172,6 +171,7 @@ const tts = await openai.audio.speech.create({
     res.status(500).json({ audioUrl: "", error: "tts_failed" });
   }
 });
+
 
 
 
