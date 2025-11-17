@@ -142,10 +142,13 @@ app.post("/speak", async (req, res) => {
 
     // 💬 Adjust tone for deep, grandpa-like Santa
     const santaText =
-  `Ho ho ho, my dear friend. ${text}. ` +
-  `It's Santa Claus here, with a big, warm smile. ` +
-  `You know, I've been watching from the North Pole for many years, ` +
-  `and I can tell you that good listening and kindness make Christmas extra special.`;
+  `Ho ho ho… *cough*, pardon me there. ${text}. ` +
+  `This is Santa… comin’ to you in my old raspy voice. ` +
+  `You know, after all these winters by the fire and all these years talkin’ to children, ` +
+  `my voice has gotten a bit rough around the edges. ` +
+  `But don’t you worry — I’m still jolly, still listenin’, and still proud of you. ` +
+  `Now remember… good behavior and kindness warm this old heart more than anything under the tree.`;
+
 
 
     // 🧑‍🎤 Deep & grandpa-like tone
