@@ -142,19 +142,22 @@ app.post("/speak", async (req, res) => {
 
     // 💬 Adjust tone for deep, grandpa-like Santa
     const santaText =
-      `Ho ho ho! ${text}. ` +
-      `This is Santa Claus speaking — with a big smile and a warm heart. ` +
-      `Remember, my dear one, kindness and good listening bring joy to everyone!`;
+  `Ho ho ho, my dear friend. ${text}. ` +
+  `It's Santa Claus here, with a big, warm smile. ` +
+  `You know, I've been watching from the North Pole for many years, ` +
+  `and I can tell you that good listening and kindness make Christmas extra special.`;
+
 
     // 🧑‍🎤 Deep & grandpa-like tone
     // "alloy" produces a fuller, deeper timbre than "verse"
     // You can try "alloy", "brass", or "onyx" (if available)
     const tts = await openai.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy",   // deeper male tone
-      input: santaText,
-      response_format: "mp3"
-    });
+  model: "gpt-4o-mini-tts",
+  voice: "onyx", // deeper, more mature-sounding
+  input: santaText,
+  response_format: "mp3",
+});
+
 
     const buf = Buffer.from(await tts.arrayBuffer());
     const fileName = `${Date.now()}-santa.mp3`;
