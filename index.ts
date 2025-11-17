@@ -145,16 +145,17 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-    // Add deeper/raspier tone without changing the message
-    const santaText = `Ho ho ho. ${text}\n<deep steady warmth with a gentle rasp>`;
+  
+    const santaText = `Hee hee! ${text}`;  // small, fun prefix
 
-    const tts = await openai.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "onyx",
-      input: santaText,
-      response_format: "mp3",
-      speed: 0.88
-    });
+const tts = await openai.audio.speech.create({
+  model: "gpt-4o-mini-tts",
+  voice: "alloy",      // brighter & lighter than onyx
+  input: santaText,
+  response_format: "mp3",
+  speed: 1.15          // a bit faster = more elfy / energetic
+});
+
 
     const buf = Buffer.from(await tts.arrayBuffer());
     const fileName = `${Date.now()}-santa.mp3`;
