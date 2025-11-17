@@ -93,7 +93,7 @@ app.post("/chat", async (req, res) => {
   const messages = [
     { role: "system", content: santaSystem },
     { role: "user", content: text }
-  ] as const;
+  ];
 
   try {
     const resp = await openai.chat.completions.create({
@@ -152,7 +152,7 @@ app.post("/speak", async (req, res) => {
       model: "gpt-4o-mini-tts",
       voice: "alloy",   // deeper male tone
       input: santaText,
-      format: "mp3"
+      response_format: "mp3"
     });
 
     const buf = Buffer.from(await tts.arrayBuffer());
