@@ -145,45 +145,31 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-    // 💬 Adjust tone for deep, grandpa-like Santa
-    const santaText =
-  `Ho ho ho… *cough*, pardon me there. ${text}. ` +
-  `This is Santa… comin’ to you in my old raspy voice. ` +
-  `You know, after all these winters by the fire and all these years talkin’ to children, ` +
-  `my voice has gotten a bit rough around the edges. ` +
-  `But don’t you worry — I’m still jolly, still listenin’, and still proud of you. ` +
-  `Now remember… good behavior and kindness warm this old heart more than anything under the tree.`;
+    // Very short: just add a little "Ho ho ho" in front of Santa's answer
+    const santaText = `Ho ho ho. ${text}`;
 
-
-
-    // 🧑‍🎤 Deep & grandpa-like tone
-    // "alloy" produces a fuller, deeper timbre than "verse"
-    // You can try "alloy", "brass", or "onyx" (if available)
     const tts = await openai.audio.speech.create({
-  model: "gpt-4o-mini-tts",
-  voice: "onyx", // deeper, more mature-sounding
-  input: santaText,
-  response_format: "mp3",
-});
-
+      model: "gpt-4o-mini-tts",
+      voice: "onyx",          // deeper / older-sounding base
+      input: santaText,
+      response_format: "mp3",
+    });
 
     const buf = Buffer.from(await tts.arrayBuffer());
     const fileName = `${Date.now()}-santa.mp3`;
     fs.writeFileSync(path.join("public", fileName), buf);
 
-    return res.json({
-      audioUrl: `${process.env.PUBLIC_BASE_URL}/${fileName}`
-    });
+    const base = process.env.PUBLIC_BASE_URL || "";
+    const audioUrl = `${base}/${fileName}`;
+    console.log("🔊 TTS file:", fileName, "→", audioUrl);
+
+    res.json({ audioUrl });
   } catch (err) {
     console.error("TTS error:", err);
-    const { text = "" } = req.body || {};
-    const fileName = `${Date.now()}-santa.txt`;
-    fs.writeFileSync(path.join("public", fileName), text, "utf-8");
-    return res.json({
-      audioUrl: `${process.env.PUBLIC_BASE_URL}/${fileName}`
-    });
+    res.status(500).json({ audioUrl: "", error: "tts_failed" });
   }
 });
+
 
 
 
