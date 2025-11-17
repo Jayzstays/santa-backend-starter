@@ -145,14 +145,15 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-    // Very short: just add a little "Ho ho ho" in front of Santa's answer
-    const santaText = `Ho ho ho. ${text}`;
+    // Add deeper/raspier tone without changing the message
+    const santaText = `Ho ho ho. ${text}\n<deep steady warmth with a gentle rasp>`;
 
     const tts = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "onyx",          // deeper / older-sounding base
+      voice: "onyx",
       input: santaText,
       response_format: "mp3",
+      speed: 0.88
     });
 
     const buf = Buffer.from(await tts.arrayBuffer());
