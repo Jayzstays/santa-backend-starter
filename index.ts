@@ -194,17 +194,15 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-    // Pepper the elf: high, playful, helium-like
+    // Pepper the elf reads exactly this text
     const elfText = text;
 
     const tts = await openai.audio.speech.create({
-  model: "gpt-4o-mini-tts",
-  voice: "alloy",       // best bright voice
-  input: elfText,
-  response_format: "mp3",
-  speed: 1.22            // slightly higher pitch
-});
-
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",          // bright, elf-y voice
+      input: elfText,
+      response_format: "mp3",  // return MP3 binary
+    });
 
     const buf = Buffer.from(await tts.arrayBuffer());
     const fileName = `${Date.now()}-pepper.mp3`;
