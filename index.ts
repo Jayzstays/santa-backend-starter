@@ -108,12 +108,13 @@ app.post("/chat", async (req, res) => {
     { role: "system", content: santaSystem },
   ];
 
-  if (children[childId]?.name) {
-    messages.push({
-      role: "system",
-      content: `The child's first name is ${children[childId].name}. Greet them by name sometimes in a warm and friendly way.`,
-    });
-  }
+ if (children[childId]?.name) {
+  messages.push({
+    role: "system",
+    content: `The child's first name is ${children[childId].name}. Use it warmly sometimes.`,
+  });
+}
+
 
   messages.push({ role: "user", content: text });
 
@@ -146,18 +147,22 @@ app.post("/chat", async (req, res) => {
     }
 
     // If the model included child name JSON, capture it
-    const nameMatch = reply.match(/\{[\s\S]*"child"[\s\S]*\}/);
-    if (nameMatch) {
-      try {
-        const parsed = JSON.parse(nameMatch[0]);
-        const c = parsed.child;
-        if (c?.name) {
-          children[childId] ??= {};
-          children[childId].name = c.name;
-        }
-        reply = reply.replace(nameMatch[0], "").trim();
-      } catch {}
-    }
+    // --- Extract child name JSON reliably ---
+const nameRegex = /\{"child"\s*:\s*\{"name"\s*:\s*"([^"]+)"\}\}/;
+const nameMatch = reply.match(nameRegex);
+
+if (nameMatch) {
+  const childName = nameMatch[1];
+  if (childName) {
+    children[childId] ??= {};
+    children[childId].name = childName;
+    console.log("📛 Saved child name:", childName);
+  }
+
+  // Remove JUST the JSON from Pepper's spoken reply
+  reply = reply.replace(nameRegex, "").trim();
+}
+
 
     return res.json({ replyText: reply });
   } catch (err: any) {
@@ -190,15 +195,16 @@ app.post("/speak", async (req, res) => {
     const { text = "" } = req.body || {};
 
     // Pepper the elf: high, playful, helium-like
-    const elfText = `Hee hee! ${text}`;
+    const elfText = text;
 
     const tts = await openai.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy",          // brighter / lighter
-      input: elfText,
-      response_format: "mp3",
-      speed: 1.2               // higher speed = higher pitch / more elfy
-    });
+  model: "gpt-4o-mini-tts",
+  voice: "alloy",       // best bright voice
+  input: elfText,
+  response_format: "mp3",
+  speed: 1.22            // slightly higher pitch
+});
+
 
     const buf = Buffer.from(await tts.arrayBuffer());
     const fileName = `${Date.now()}-pepper.mp3`;
