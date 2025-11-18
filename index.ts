@@ -3,13 +3,10 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { OpenAI } from "openai";
 import fs from "fs";
 import path from "path";
-
-// Ensure folders exist (prevents ENOENT errors)
-fs.mkdirSync("public", { recursive: true });
-fs.mkdirSync("uploads", { recursive: true });
+import mime from "mime-types";
+import { OpenAI } from "openai";
 
 const app = express();
 app.use(cors());
@@ -18,41 +15,47 @@ app.use(express.static("public"));
 
 const upload = multer({ dest: "uploads/" });
 
-// TODO: Put your API key in .env
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// In-memory demo storage
+// In-memory storage
 const gifts: Record<string, Array<{ item: string; details?: any; at: string }>> = {};
-const children: Record<string, { name?: string }> = {};
-const santaSystem = `You are Pepper, one of Santa's helper elves in the North Pole.
+
+// ---------- Helpers ----------
+
+function buildPepperSystemPrompt(childName?: string) {
+  let base = `You are Pepper, one of Santa's helper elves in the North Pole.
 You sound cheerful, playful, and kind. Always answer like Pepper the elf.
 Answer the child’s question directly in 1–2 short sentences.
-If you do NOT know the child's first name yet, politely ask them for their first name.
-Once you know their name, use it sometimes in a warm, friendly way.
 Encourage good listening and kindness, but do not lecture or be scary.
+Do NOT ask the child for their name; the parent has already provided it.`;
+
+  if (childName && childName.trim().length > 0) {
+    base += ` The child's first name is ${childName.trim()}. Use their name sometimes in a warm, friendly way, but do not overuse it.`;
+  }
+
+  base += `
 If the child mentions a gift wish, include a JSON line at the very end like:
-{"gift":{"item":"red bike","details":{"notes":"any extra info here"}}}
-If you learn or confirm the child's first name, also include a JSON line at the very end like:
-{"child":{"name":"Emma"}}`;
+{"gift":{"item":"red bike","details":{"notes":"any extra info here"}}}`;
 
+  return base;
+}
 
-
-
+// ---------- Routes ----------
 
 // Health check
-app.get("/", (_req, res) => res.send("Santa backend is running. Use /transcribe, /chat, /speak"));
+app.get("/", (_req, res) => {
+  res.send("Pepper backend is running. Use /transcribe, /chat, /speak, /gifts");
+});
 
-import mime from "mime-types";
-// ...
-
-// 1) STT: audio -> text (OpenAI Whisper) with safe temp filename
+// 1) STT: audio -> text
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No audio file uploaded" });
     }
 
-    // See what iOS/Expo sent us
     console.log("Uploaded file:", {
       fieldname: req.file.fieldname,
       originalname: req.file.originalname,
@@ -61,64 +64,45 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
       size: req.file.size,
     });
 
-    // Ensure the temp file has an audio extension (Whisper likes extensions)
-    const guessExt =
-      mime.extension(req.file.mimetype) ||
-      (path.extname(req.file.originalname).slice(1) || "m4a");
-    const withExtPath = req.file.path + "." + guessExt;
-    fs.renameSync(req.file.path, withExtPath);
+    const filePath = req.file.path;
+    const detectedType =
+      req.file.mimetype || mime.lookup(req.file.originalname) || "audio/m4a";
 
-    // Send the renamed file to Whisper
-    const stt = await openai.audio.transcriptions.create({
-      model: "whisper-1",
-      file: fs.createReadStream(withExtPath) as any,
-      // language: "en", // optional
-      // temperature: 0,
+    const transcription = await openai.audio.transcriptions.create({
+      model: "gpt-4o-mini-transcribe",
+      file: fs.createReadStream(filePath) as any,
+      mime_type: String(detectedType),
     });
 
-    const text = (stt as any).text || "";
+    const text = transcription.text || "Hello Pepper!";
     console.log("🎤 Transcribed:", text);
 
-    // Clean up temp file
-    fs.unlink(withExtPath, () => {});
-    return res.json({ text, sessionId: Math.random().toString(36).slice(2) });
-  } catch (err) {
-    console.error("STT error:", err);
-
-    // Best-effort cleanup if either path exists
-    try { if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); } catch {}
-    try {
-      const files = fs.readdirSync("uploads").filter(f => f.startsWith(req.file?.filename || ""));
-      for (const f of files) fs.unlinkSync(path.join("uploads", f));
-    } catch {}
-
-    // Fallback so your app still flows
-    return res.json({ text: "Hello Santa!", sessionId: Math.random().toString(36).slice(2) });
+    // Clean up
+    fs.unlink(filePath, () => {});
+    return res.json({ text });
+  } catch (err: any) {
+    console.error("STT error:", err?.message || err);
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.json({ text: "Hello Pepper!" });
   }
 });
 
-
-
-// 2) Chat (LLM with graceful fallback when quota/keys fail)
+// 2) Chat: child text -> Pepper reply (+ capture gifts)
 app.post("/chat", async (req, res) => {
-  const { childId = "demo-child", text = "" } = req.body || {};
-
-  // Build messages, including child's name if we already know it
-  const messages: any[] = [
-    { role: "system", content: santaSystem },
-  ];
-
- if (children[childId]?.name) {
-  messages.push({
-    role: "system",
-    content: `The child's first name is ${children[childId].name}. Use it warmly sometimes.`,
-  });
-}
-
-
-  messages.push({ role: "user", content: text });
+  const {
+    childId = "demo-child",
+    childName = "",
+    text = "",
+  } = req.body || {};
 
   try {
+    const systemPrompt = buildPepperSystemPrompt(childName);
+
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: text },
+    ];
+
     const resp = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
@@ -128,8 +112,8 @@ app.post("/chat", async (req, res) => {
       resp.choices[0]?.message?.content ||
       "Pepper the elf is having a little trouble right now. Please try again soon.";
 
-    // If the model included gift JSON, capture it
-    const giftMatch = reply.match(/\{[\s\S]*"gift"[\s\S]*\}/);
+    // Extract gift JSON if present
+    const giftMatch = reply.match(/\{"gift"[\s\S]*\}/);
     if (giftMatch) {
       try {
         const parsed = JSON.parse(giftMatch[0]);
@@ -146,24 +130,6 @@ app.post("/chat", async (req, res) => {
       } catch {}
     }
 
-    // If the model included child name JSON, capture it
-    // --- Extract child name JSON reliably ---
-const nameRegex = /\{"child"\s*:\s*\{"name"\s*:\s*"([^"]+)"\}\}/;
-const nameMatch = reply.match(nameRegex);
-
-if (nameMatch) {
-  const childName = nameMatch[1];
-  if (childName) {
-    children[childId] ??= {};
-    children[childId].name = childName;
-    console.log("📛 Saved child name:", childName);
-  }
-
-  // Remove JUST the JSON from Pepper's spoken reply
-  reply = reply.replace(nameRegex, "").trim();
-}
-
-
     return res.json({ replyText: reply });
   } catch (err: any) {
     console.error(
@@ -171,8 +137,7 @@ if (nameMatch) {
       err?.code || err?.message || err
     );
 
-    // Pepper-style fallback
-    const fallback = `Hee hee! I heard: "${text}". This is Pepper the elf, and I'll be sure to tell Santa. Keep being kind and helpful at home!`;
+    const fallback = `This is Pepper the elf! I heard: "${text}". I'll be sure to tell Santa. Keep being kind and helpful at home!`;
 
     const wish = text.match(/i (?:want|would like|wish for) (.+)/i);
     if (wish) {
@@ -187,21 +152,19 @@ if (nameMatch) {
   }
 });
 
-
+// 3) TTS: Pepper reply -> MP3
 app.post("/speak", async (req, res) => {
   try {
     fs.mkdirSync("public", { recursive: true });
 
     const { text = "" } = req.body || {};
-
-    // Pepper the elf reads exactly this text
-    const elfText = text;
+    const elfText = text; // No extra fluff, just Pepper's reply
 
     const tts = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "alloy",          // bright, elf-y voice
+      voice: "alloy", // bright, elf-like
       input: elfText,
-      response_format: "mp3",  // return MP3 binary
+      response_format: "mp3",
     });
 
     const buf = Buffer.from(await tts.arrayBuffer());
@@ -219,19 +182,14 @@ app.post("/speak", async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
+// 4) Gift list per child
 app.get("/gifts", (req, res) => {
   const childId = String(req.query.childId || "demo-child");
   res.json(gifts[childId] || []);
 });
 
+// Start server
 const PORT = Number(process.env.PORT || 8787);
 app.listen(PORT, () => {
-  console.log("Santa backend listening on", PORT);
+  console.log("Pepper backend listening on", PORT);
 });
