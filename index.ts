@@ -23,13 +23,19 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // In-memory demo storage
 const gifts: Record<string, Array<{ item: string; details?: any; at: string }>> = {};
-const santaSystem = `You are one of Santa's helper elves in the North Pole.
-You sound cheerful and a little playful, but you always stay kind and reassuring.
+const children: Record<string, { name?: string }> = {};
+const santaSystem = `You are Pepper, one of Santa's helper elves in the North Pole.
+You sound cheerful, playful, and kind. Always answer like Pepper the elf.
 Answer the child’s question directly in 1–2 short sentences.
-You can mention Santa in third person (for example: "I'll tell Santa" or "Santa will be glad") but do NOT pretend to be Santa.
-Encourage good listening and kindness, but do not lecture.
+If you do NOT know the child's first name yet, politely ask them for their first name.
+Once you know their name, use it sometimes in a warm, friendly way.
+Encourage good listening and kindness, but do not lecture or be scary.
 If the child mentions a gift wish, include a JSON line at the very end like:
-{"gift":{"item":"red bike","details":{"notes":"any extra info here"}}}`;
+{"gift":{"item":"red bike","details":{"notes":"any extra info here"}}}
+If you learn or confirm the child's first name, also include a JSON line at the very end like:
+{"child":{"name":"Emma"}}`;
+
+
 
 
 
@@ -97,10 +103,19 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 app.post("/chat", async (req, res) => {
   const { childId = "demo-child", text = "" } = req.body || {};
 
-  const messages = [
+  // Build messages, including child's name if we already know it
+  const messages: any[] = [
     { role: "system", content: santaSystem },
-    { role: "user", content: text }
   ];
+
+  if (children[childId]?.name) {
+    messages.push({
+      role: "system",
+      content: `The child's first name is ${children[childId].name}. Greet them by name sometimes in a warm and friendly way.`,
+    });
+  }
+
+  messages.push({ role: "user", content: text });
 
   try {
     const resp = await openai.chat.completions.create({
@@ -108,31 +123,59 @@ app.post("/chat", async (req, res) => {
       messages,
     });
 
-    let reply = resp.choices[0]?.message?.content || "Ho ho ho! Merry Christmas!";
+    let reply =
+      resp.choices[0]?.message?.content ||
+      "Pepper the elf is having a little trouble right now. Please try again soon.";
 
     // If the model included gift JSON, capture it
-    const m = reply.match(/\{[\s\S]*"gift"[\s\S]*\}/);
-    if (m) {
+    const giftMatch = reply.match(/\{[\s\S]*"gift"[\s\S]*\}/);
+    if (giftMatch) {
       try {
-        const parsed = JSON.parse(m[0]);
+        const parsed = JSON.parse(giftMatch[0]);
         const g = parsed.gift;
         if (g?.item) {
           gifts[childId] ??= [];
-          gifts[childId].push({ item: g.item, details: g.details, at: new Date().toISOString() });
+          gifts[childId].push({
+            item: g.item,
+            details: g.details,
+            at: new Date().toISOString(),
+          });
         }
-        reply = reply.replace(/\{[\s\S]*"gift"[\s\S]*\}/, "").trim();
+        reply = reply.replace(giftMatch[0], "").trim();
+      } catch {}
+    }
+
+    // If the model included child name JSON, capture it
+    const nameMatch = reply.match(/\{[\s\S]*"child"[\s\S]*\}/);
+    if (nameMatch) {
+      try {
+        const parsed = JSON.parse(nameMatch[0]);
+        const c = parsed.child;
+        if (c?.name) {
+          children[childId] ??= {};
+          children[childId].name = c.name;
+        }
+        reply = reply.replace(nameMatch[0], "").trim();
       } catch {}
     }
 
     return res.json({ replyText: reply });
   } catch (err: any) {
-    console.error("LLM error (using fallback):", err?.code || err?.message || err);
-    const fallback = `Ho ho ho! I heard: "${text}". I'll tell the elves! Keep being kind and helpful at home.`;
+    console.error(
+      "LLM error (using fallback):",
+      err?.code || err?.message || err
+    );
+
+    // Pepper-style fallback
+    const fallback = `Hee hee! I heard: "${text}". This is Pepper the elf, and I'll be sure to tell Santa. Keep being kind and helpful at home!`;
 
     const wish = text.match(/i (?:want|would like|wish for) (.+)/i);
     if (wish) {
       gifts[childId] ??= [];
-      gifts[childId].push({ item: wish[1], at: new Date().toISOString() });
+      gifts[childId].push({
+        item: wish[1],
+        at: new Date().toISOString(),
+      });
     }
 
     return res.json({ replyText: fallback });
@@ -146,19 +189,19 @@ app.post("/speak", async (req, res) => {
 
     const { text = "" } = req.body || {};
 
-    // Elf voice: light, quick, playful
+    // Pepper the elf: high, playful, helium-like
     const elfText = `Hee hee! ${text}`;
 
     const tts = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "alloy",          // brighter, younger than onyx
+      voice: "alloy",          // brighter / lighter
       input: elfText,
       response_format: "mp3",
-      speed: 1.12              // a bit faster = more elfy
+      speed: 1.2               // higher speed = higher pitch / more elfy
     });
 
     const buf = Buffer.from(await tts.arrayBuffer());
-    const fileName = `${Date.now()}-elf.mp3`;
+    const fileName = `${Date.now()}-pepper.mp3`;
     fs.writeFileSync(path.join("public", fileName), buf);
 
     const base = process.env.PUBLIC_BASE_URL || "";
@@ -171,6 +214,7 @@ app.post("/speak", async (req, res) => {
     res.status(500).json({ audioUrl: "", error: "tts_failed" });
   }
 });
+
 
 
 
