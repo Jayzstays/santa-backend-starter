@@ -115,6 +115,14 @@ app.post("/chat", async (req, res) => {
     let reply =
       resp.choices[0]?.message?.content ||
       "Pepper the elf is having a little trouble right now. Please try again soon.";
+        console.log("Pepper raw reply:", reply);
+
+    // If Pepper gives a generic "how can I help" style answer, override it
+    const genericRegex = /(what can i help you with today|how can i help you today|what can i help you with)/i;
+    if (genericRegex.test(reply)) {
+      reply = `I heard you say: "${text}". I'm Pepper the elf here in Santa's workshop, and that sounds very important!`;
+    }
+
 
     // Extract gift JSON if present
     const giftMatch = reply.match(/\{"gift"[\s\S]*\}/);
